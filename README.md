@@ -2,6 +2,9 @@
 
 flutter table with sticky header and sticky left column
 
+## Screenshots
+![截图](https://github.com/luodongseu/flutter_sticky_table/blob/master/ezgif-5-c52876ed6242.gif)
+
 ## Getting Started
 
 ### add dependencies
@@ -17,6 +20,7 @@ import 'package:flutter_sticky_table/flutter_sticky_table.dart';
 ```
 
 ### use table widget
+
 ```
 /// first: define columns and data
 dynamic columns = [
