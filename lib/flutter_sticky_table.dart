@@ -2,6 +2,7 @@ library flutter_sticky_table;
 
 import 'dart:math';
 
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -14,11 +15,14 @@ const defaultRowHeight = 64.0;
 /// 默认的padding
 const defaultPadding = 12.0;
 
+/// 默认的头部阴影大小
+const defaultHeaderElevation = 2.0;
+
 /// 默认的头部背景
-const defaultHeaderBackgroundColor = Color.fromRGBO(220, 220, 220, 1.0);
+const defaultHeaderBackgroundColor = Color.fromRGBO(240, 240, 240, 1.0);
 
 /// 默认的内容背景
-const defaultBodyBackgroundColor = Color.fromRGBO(225, 225, 225, 1.0);
+const defaultBodyBackgroundColor = Color.fromRGBO(250, 250, 250, 1.0);
 
 /// 列的渲染器
 /// context: 上下文
@@ -30,6 +34,9 @@ typedef ColumnRender = Widget Function(BuildContext context, dynamic value);
 class ColumnsProps {
   /// 列头显示的标题
   final String title;
+
+  /// 子元素
+  final Widget customTitle;
 
   /// 列所在的字段索引
   final String dataIndex;
@@ -53,12 +60,55 @@ class ColumnsProps {
   final Color headColor;
 
   ColumnsProps(this.title, this.dataIndex,
-      {this.width = 0.0,
+      {this.customTitle,
+      this.width = 0.0,
       this.render,
 //      this.height = 0.0,
       this.alignment = Alignment.centerLeft,
       this.headColor,
       this.color});
+
+  @override
+  int get hashCode => super.hashCode;
+
+  @override
+  bool operator ==(other) {
+    if (other is ColumnsProps) {
+      ColumnsProps _other = other;
+      return _other.title == title &&
+//          _other.customTitle == customTitle &&
+          _other.color == color &&
+          _other.width == width &&
+          _other.dataIndex == dataIndex &&
+//          _other.render == render &&
+          _other.alignment == alignment &&
+          _other.headColor == headColor;
+    }
+    return false;
+  }
+
+  String toString() {
+    return '${this.title};${this.color};${this.width};${this.dataIndex};${this.alignment};${this.headColor}';
+  }
+
+  static bool propsEquals(List<ColumnsProps> c1, List<ColumnsProps> c2) {
+    if (c1 == null && c2 == null) {
+      return true;
+    }
+    if (!(c1 != null && c2 != null)) {
+      return false;
+    }
+    if (c1.length != c2.length) {
+      return false;
+    }
+    for (int i = 0; i < c1.length; i++) {
+      if (c1[i] != c2[i]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 }
 
 /// 表格
@@ -98,6 +148,10 @@ class _StickyTableState extends State<StickyTable> {
   ScrollController headerController = new ScrollController();
   ScrollController bodyController = new ScrollController();
 
+  /// 是否显示头部的阴影
+  /// @todo: 下个阶段实现左侧固定的阴影
+  bool showHeaderElevation = false;
+
   ///
   /// 头部滚动监听器
   /// 用于计算当前header的偏移量，然后设置body的偏移量
@@ -132,22 +186,36 @@ class _StickyTableState extends State<StickyTable> {
   }
 
   @override
+  void didUpdateWidget(StickyTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+  }
+
+  @override
   Widget build(BuildContext context) {
     Widget sticky = StickyHeader(
-      header: TableHeader(
-          scrollController: headerController,
-          stickyColumnCount: widget.stickyColumnCount,
-          columns: widget.columns,
-          showBorder: widget.showBorder,
-          backgroundColor: widget.headerBackgroundColor),
-      content: TableBody(
-          scrollController: bodyController,
-          stickyColumnCount: widget.stickyColumnCount,
-          columns: widget.columns,
-          showBorder: widget.showBorder,
-          data: widget.data,
-          backgroundColor: widget.bodyBackgroundColor),
-    );
+        header: TableHeader(
+            scrollController: headerController,
+            stickyColumnCount: widget.stickyColumnCount,
+            columns: widget.columns,
+            showBorder: widget.showBorder,
+            elevation: showHeaderElevation ? defaultHeaderElevation : 0.0,
+            backgroundColor: widget.headerBackgroundColor),
+        content: TableBody(
+            scrollController: bodyController,
+            stickyColumnCount: widget.stickyColumnCount,
+            columns: widget.columns,
+            showBorder: widget.showBorder,
+            data: widget.data,
+            backgroundColor: widget.bodyBackgroundColor),
+        onScrolled: (v) {
+          bool _showHeaderElevation = showHeaderElevation;
+          _showHeaderElevation = v > 0;
+          if (_showHeaderElevation != _showHeaderElevation && mounted) {
+            setState(() {
+              showHeaderElevation = v > 0;
+            });
+          }
+        });
 
     return null != Scrollable.of(context)
         ? sticky
@@ -190,6 +258,9 @@ class _TableBodyState extends State<TableBody> {
 
   bool mounted = false;
 
+  /// 横向是否已滚动
+  bool isHorizontalScrolled = false;
+
   @override
   void initState() {
     super.initState();
@@ -197,6 +268,20 @@ class _TableBodyState extends State<TableBody> {
 
     widget.data.forEach((_) {
       maxHeights.add(0);
+    });
+
+    widget.scrollController.addListener(() {
+      var _isHorizontalScrolled = isHorizontalScrolled;
+      if (widget.scrollController.offset != 0) {
+        _isHorizontalScrolled = true;
+      } else {
+        _isHorizontalScrolled = false;
+      }
+      if (_isHorizontalScrolled != isHorizontalScrolled && mounted) {
+        setState(() {
+          isHorizontalScrolled = _isHorizontalScrolled;
+        });
+      }
     });
   }
 
@@ -210,9 +295,11 @@ class _TableBodyState extends State<TableBody> {
   @override
   void didUpdateWidget(TableBody oldWidget) {
     super.didUpdateWidget(oldWidget);
+    Function eq = const DeepCollectionEquality().equals;
 
     /// 如果数据没变化则不更新
-    if (oldWidget.data == widget.data && oldWidget.columns == widget.columns) {
+    if (ColumnsProps.propsEquals(oldWidget.columns, widget.columns) &&
+        eq(oldWidget.data, widget.data)) {
       return;
     }
 
@@ -306,25 +393,37 @@ class _TableBodyState extends State<TableBody> {
       List<Widget> unStickyColumnWidgets =
           unStickyColumns.map((ColumnsProps c) => getCell(c)).toList();
 
-      return new Row(mainAxisSize: MainAxisSize.max, children: <Widget>[
-        new Container(
+      return Row(
+          mainAxisSize: MainAxisSize.max,
+          verticalDirection: VerticalDirection.down,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: <Widget>[
+            Container(
 //          color: Colors.grey,
-          child: new Row(
+              child: Row(
 //            mainAxisSize: MainAxisSize.min,
-            children: stickyColumnWidgets,
-          ),
-        ),
-        Expanded(
-            child: new Container(
+                children: stickyColumnWidgets,
+              ),
+              decoration: BoxDecoration(boxShadow: [
+//                  BoxShadow(
+//                    color: Colors.black45,
+//                    offset: Offset(2.0, 0),
+//                    blurRadius: 0.8,
+//                    spreadRadius: 2.0,
+//                  ),
+              ]),
+            ),
+            Expanded(
+                child: new Container(
 //                color: Colors.blue,
-                child: new SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    controller: widget.scrollController,
-                    child: new Row(
+                    child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        controller: widget.scrollController,
+                        child: Row(
 //                        mainAxisSize: MainAxisSize.min,
 //                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: unStickyColumnWidgets))))
-      ]);
+                            children: unStickyColumnWidgets))))
+          ]);
     });
   }
 }
@@ -344,13 +443,17 @@ class TableHeader extends StatefulWidget {
 
   final bool showBorder;
 
+  /// 阴影
+  final double elevation;
+
   const TableHeader(
       {Key key,
       this.scrollController,
       this.stickyColumnCount = 0,
       this.columns,
       this.backgroundColor,
-      this.showBorder = false})
+      this.showBorder = false,
+      this.elevation = 0.0})
       : super(key: key);
 
   @override
@@ -372,9 +475,10 @@ class _TableHeaderState extends State<TableHeader> {
   @override
   void didUpdateWidget(TableHeader oldWidget) {
     super.didUpdateWidget(oldWidget);
+    Function eq = const DeepCollectionEquality().equals;
 
     /// 如果数据没变化则不更新
-    if (oldWidget.columns == widget.columns) {
+    if (ColumnsProps.propsEquals(oldWidget.columns, widget.columns)) {
       return;
     }
 
@@ -393,7 +497,7 @@ class _TableHeaderState extends State<TableHeader> {
   /// 单元格
   Widget getCell(ColumnsProps c) {
     return TableCell(
-      render: Text(c.title),
+      render: c.customTitle ?? Text(c.title),
       backgroundColor: c.headColor,
       width: c.width > 0 ? c.width : defaultColumnWidth,
       showBorder: widget.showBorder,
@@ -449,17 +553,19 @@ class _TableHeaderState extends State<TableHeader> {
     List<Widget> unStickyColumnWidgets =
         unStickyColumns.map((ColumnsProps c) => getCell(c)).toList();
 
-    return new Container(
-      child: new Row(
-          children: <Widget>[]
-            ..addAll(stickyColumnWidgets)
-            ..add(Expanded(
-                child: new SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    controller: widget.scrollController,
-                    child: new Row(children: unStickyColumnWidgets))))),
-      color: widget.backgroundColor ?? defaultHeaderBackgroundColor,
-    );
+    return Material(
+        elevation: widget.elevation ?? 0.0,
+        child: new Container(
+          child: new Row(
+              children: <Widget>[]
+                ..addAll(stickyColumnWidgets)
+                ..add(Expanded(
+                    child: new SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        controller: widget.scrollController,
+                        child: new Row(children: unStickyColumnWidgets))))),
+          color: widget.backgroundColor ?? defaultHeaderBackgroundColor,
+        ));
   }
 }
 
@@ -479,6 +585,8 @@ class TableCell extends StatelessWidget {
 
   final Color backgroundColor;
 
+  final Border customBorder;
+
   const TableCell(
       {Key key,
       this.width = 0.0,
@@ -487,7 +595,8 @@ class TableCell extends StatelessWidget {
       this.onSized,
       this.render,
       this.height,
-      this.backgroundColor})
+      this.backgroundColor,
+      this.customBorder})
       : super(key: key);
 
   @override
@@ -504,13 +613,13 @@ class TableCell extends StatelessWidget {
       padding: EdgeInsets.all(defaultPadding),
       alignment: alignment ?? Alignment.centerLeft,
       decoration: new BoxDecoration(
-          color: backgroundColor,
-          border: showBorder
-              ? new Border.all(color: Colors.black12, width: 1.0)
-              : null),
+        color: backgroundColor,
+        border: showBorder
+            ? new Border.all(color: Colors.black12, width: 1.0)
+            : customBorder,
+      ),
       child: this.render,
     );
-    ;
   }
 }
 
@@ -528,10 +637,13 @@ class StickyHeader extends MultiChildRenderObjectWidget {
   ///
   final Widget content;
 
+  final ValueChanged<double> onScrolled;
+
   StickyHeader({
     Key key,
     @required this.header,
     @required this.content,
+    this.onScrolled,
   }) : super(
           key: key,
           // Note: The order of the children must be preserved for the RenderObject.
@@ -542,15 +654,15 @@ class StickyHeader extends MultiChildRenderObjectWidget {
   StickyHeaderRender createRenderObject(BuildContext context) {
     var scrollable = Scrollable.of(context);
     assert(scrollable != null);
-    return new StickyHeaderRender(
-      scrollable: scrollable,
-    );
+    return StickyHeaderRender(scrollable: scrollable, onScrolled: onScrolled);
   }
 
   @override
   void updateRenderObject(
       BuildContext context, StickyHeaderRender renderObject) {
-    renderObject.._scrollable = Scrollable.of(context);
+    renderObject
+      .._scrollable = Scrollable.of(context)
+      .._onScrolled = onScrolled;
   }
 }
 
@@ -563,13 +675,16 @@ class StickyHeaderRender extends RenderBox
 
   ScrollableState _scrollable;
 
+  ValueChanged<double> _onScrolled;
+
   RenderBox get _headerBox => lastChild;
 
   RenderBox get _contentBox => firstChild;
 
-  StickyHeaderRender({
-    @required ScrollableState scrollable,
-  }) : _scrollable = scrollable;
+  StickyHeaderRender(
+      {@required ScrollableState scrollable, ValueChanged<double> onScrolled})
+      : _scrollable = scrollable,
+        _onScrolled = onScrolled;
 
   @override
   bool get isRepaintBoundary => true;
@@ -577,7 +692,15 @@ class StickyHeaderRender extends RenderBox
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
-    _scrollable.position?.addListener(markNeedsLayout);
+    _scrollable.position?.addListener(() {
+      markNeedsLayout();
+
+      final headerParentData =
+          _headerBox.parentData as MultiChildLayoutParentData;
+      if (null != _onScrolled) {
+        _onScrolled(headerParentData.offset.dy);
+      }
+    });
   }
 
   @override
@@ -607,7 +730,6 @@ class StickyHeaderRender extends RenderBox
 
     // layout both header and content widget
     final childConstraints = constraints.loosen();
-    print(childConstraints);
     _headerBox.layout(childConstraints, parentUsesSize: true);
     _contentBox.layout(childConstraints, parentUsesSize: true);
 
@@ -641,7 +763,6 @@ class StickyHeaderRender extends RenderBox
         _headerBox.parentData as MultiChildLayoutParentData;
     headerParentData.offset =
         new Offset(0.0, max(0.0, min(-stuckXOffset, maxOffset)));
-//    print(headerParentData.offset);
   }
 
   double determineStuckXOffset() {
