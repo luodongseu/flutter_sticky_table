@@ -145,8 +145,8 @@ class StickyTable extends StatefulWidget {
 }
 
 class _StickyTableState extends State<StickyTable> {
-  ScrollController headerController = new ScrollController();
-  ScrollController bodyController = new ScrollController();
+  ScrollController headerController = ScrollController();
+  ScrollController bodyController = ScrollController();
 
   /// 是否显示头部的阴影
   /// @todo: 下个阶段实现左侧固定的阴影
@@ -219,7 +219,7 @@ class _StickyTableState extends State<StickyTable> {
 
     return null != Scrollable.of(context)
         ? sticky
-        : new SingleChildScrollView(
+        : SingleChildScrollView(
             child: sticky,
           );
   }
@@ -339,8 +339,8 @@ class _TableBodyState extends State<TableBody> {
         },
       ));
     }
-    return new Container(
-      child: new Column(
+    return Container(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: rows,
       ),
@@ -354,11 +354,10 @@ class _TableBodyState extends State<TableBody> {
         widget.columns.length == 0 ||
         widget.data == null ||
         widget.data.length == 0) {
-      return new Container();
+      return Container();
     }
 
-    return new LayoutBuilder(
-        builder: (BuildContext c, BoxConstraints constraints) {
+    return LayoutBuilder(builder: (BuildContext c, BoxConstraints constraints) {
       int _stickyColumnCount =
           min(widget.stickyColumnCount, widget.columns.length);
 
@@ -386,7 +385,7 @@ class _TableBodyState extends State<TableBody> {
           boxRenderObject.constraints.maxWidth - defaultColumnWidth <
               stickyWidth) {
         print('固定表格列越界了，暂时不支持渲染...');
-        return new Container();
+        return Container();
       }
 
       /// 非固定的列
@@ -414,8 +413,8 @@ class _TableBodyState extends State<TableBody> {
               ]),
             ),
             Expanded(
-                child: new Container(
-//                color: Colors.blue,
+                child: ScrollConfiguration(
+                    behavior: NoOverScrollBehavior(),
                     child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         controller: widget.scrollController,
@@ -475,7 +474,6 @@ class _TableHeaderState extends State<TableHeader> {
   @override
   void didUpdateWidget(TableHeader oldWidget) {
     super.didUpdateWidget(oldWidget);
-    Function eq = const DeepCollectionEquality().equals;
 
     /// 如果数据没变化则不更新
     if (ColumnsProps.propsEquals(oldWidget.columns, widget.columns)) {
@@ -520,7 +518,7 @@ class _TableHeaderState extends State<TableHeader> {
   @override
   Widget build(BuildContext context) {
     if (null == widget.columns || widget.columns.length == 0) {
-      return new Container();
+      return Container();
     }
 
     int _stickyColumnCount =
@@ -543,7 +541,7 @@ class _TableHeaderState extends State<TableHeader> {
         boxRenderObject.constraints.maxWidth - defaultColumnWidth <
             stickyWidth) {
       print('固定表格列越界了，暂时不支持渲染...');
-      return new Container();
+      return Container();
     }
 
     /// 不固定的列
@@ -555,15 +553,17 @@ class _TableHeaderState extends State<TableHeader> {
 
     return Material(
         elevation: widget.elevation ?? 0.0,
-        child: new Container(
-          child: new Row(
+        child: Container(
+          child: Row(
               children: <Widget>[]
                 ..addAll(stickyColumnWidgets)
                 ..add(Expanded(
-                    child: new SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        controller: widget.scrollController,
-                        child: new Row(children: unStickyColumnWidgets))))),
+                    child: ScrollConfiguration(
+                        behavior: NoOverScrollBehavior(),
+                        child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            controller: widget.scrollController,
+                            child: Row(children: unStickyColumnWidgets)))))),
           color: widget.backgroundColor ?? defaultHeaderBackgroundColor,
         ));
   }
@@ -607,15 +607,15 @@ class TableCell extends StatelessWidget {
         onSized(renderBoxRed.size);
       }
     });
-    return new Container(
+    return Container(
       height: (height ?? 0.0) > 0.0 ? height : null,
       width: width > 0.0 ? width : defaultColumnWidth,
       padding: EdgeInsets.all(defaultPadding),
       alignment: alignment ?? Alignment.centerLeft,
-      decoration: new BoxDecoration(
+      decoration: BoxDecoration(
         color: backgroundColor,
         border: showBorder
-            ? new Border.all(color: Colors.black12, width: 1.0)
+            ? Border.all(color: Colors.black12, width: 1.0)
             : customBorder,
       ),
       child: this.render,
@@ -742,7 +742,7 @@ class StickyHeaderRender extends RenderBox
     /// header与content并列
     final height = max(constraints.minHeight, headerHeight + contentHeight);
 
-    size = new Size(width, height);
+    size = Size(width, height);
     assert(size.width == constraints.constrainWidth(width));
     assert(size.height == constraints.constrainHeight(height));
     assert(size.isFinite);
@@ -752,7 +752,7 @@ class StickyHeaderRender extends RenderBox
         _contentBox.parentData as MultiChildLayoutParentData;
 
     /// 固定并列显示header
-    contentParentData.offset = new Offset(0.0, headerHeight);
+    contentParentData.offset = Offset(0.0, headerHeight);
 
     // determine by how much the header should be stuck to the top
     final double stuckXOffset = determineStuckXOffset();
@@ -762,7 +762,7 @@ class StickyHeaderRender extends RenderBox
     final headerParentData =
         _headerBox.parentData as MultiChildLayoutParentData;
     headerParentData.offset =
-        new Offset(0.0, max(0.0, min(-stuckXOffset, maxOffset)));
+        Offset(0.0, max(0.0, min(-stuckXOffset, maxOffset)));
   }
 
   double determineStuckXOffset() {
@@ -781,7 +781,7 @@ class StickyHeaderRender extends RenderBox
   void setupParentData(RenderObject child) {
     super.setupParentData(child);
     if (child.parentData is! MultiChildLayoutParentData) {
-      child.parentData = new MultiChildLayoutParentData();
+      child.parentData = MultiChildLayoutParentData();
     }
   }
 
@@ -820,5 +820,21 @@ class StickyHeaderRender extends RenderBox
   @override
   void paint(PaintingContext context, Offset offset) {
     defaultPaint(context, offset);
+  }
+}
+
+///
+/// 无弹簧的scroll行为
+///
+class NoOverScrollBehavior extends ScrollBehavior {
+  @override
+  Widget buildViewportChrome(
+      BuildContext context, Widget child, AxisDirection axisDirection) {
+    return child;
+  }
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    return const ClampingScrollPhysics();
   }
 }
